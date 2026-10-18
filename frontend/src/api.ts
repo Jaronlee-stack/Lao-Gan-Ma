@@ -35,6 +35,12 @@ export interface PhaseTask {
   approval_required: boolean;
 }
 
+export interface PhaseChatTurn {
+  role: string;
+  content: string;
+  created_at: string;
+}
+
 export interface Phase {
   id: string;
   name: string;
@@ -42,7 +48,9 @@ export interface Phase {
   tasks: PhaseTask[];
   recommended_skills: string[];
   recommended_tech: string[];
-  status: "proposed" | "approved" | "changed";
+  status: "proposed" | "approved" | "changed" | "accepted" | "rejected";
+  decision: "pending" | "accepted" | "rejected";
+  chat: PhaseChatTurn[];
 }
 
 export interface Plan {
@@ -121,6 +129,20 @@ export const api = {
       method: "POST",
       headers: jsonHeaders,
       body: JSON.stringify({ plan_id, approval_id, decision, note }),
+    }).then((r) => json<Plan>(r)),
+
+  decidePhase: (plan_id: string, phase_id: string, decision: "accepted" | "rejected" | "pending") =>
+    fetch("/api/plan/phase/decision", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ plan_id, phase_id, decision }),
+    }).then((r) => json<Plan>(r)),
+
+  chatPhase: (plan_id: string, phase_id: string, message: string, session_id?: string) =>
+    fetch("/api/plan/phase/chat", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ plan_id, phase_id, message, session_id }),
     }).then((r) => json<Plan>(r)),
 
   acceptPlan: (plan_id: string, session_id?: string) =>

@@ -11,6 +11,8 @@ from .models import (
     PlanRequest,
     AdaptRequest,
     ApprovalRequest,
+    PhaseDecisionRequest,
+    PhaseChatRequest,
     AcceptRequest,
     AcceptResult,
     FeedbackRequest,
@@ -142,6 +144,31 @@ def approve_action(req: ApprovalRequest) -> Plan:
     plan = agent.approve(req.plan_id, req.approval_id, req.decision, req.note)
     if plan is None:
         raise HTTPException(404, "plan not found")
+    return plan
+
+
+@app.post("/api/plan/phase/decision", response_model=Plan)
+def decide_phase(req: PhaseDecisionRequest) -> Plan:
+    """Accept / reject / reset an individual proposal (phase)."""
+    plan = agent.decide_phase(req.plan_id, req.phase_id, req.decision)
+    if plan is None:
+        raise HTTPException(404, "plan not found")
+    return plan
+
+
+@app.post("/api/plan/phase/chat", response_model=Plan)
+def chat_phase(req: PhaseChatRequest) -> Plan:
+    """Discuss a specific proposal with the agent (reasoning, specifics)."""
+    plan = agent.chat_about_phase(req.plan_id, req.phase_id, req.message)
+    if plan is None:
+        raise HTTPException(404, "plan not found")
+    if req.session_id:
+        db.add_message(req.session_id, "user", req.message,
+                       meta={"plan_id": req.plan_id, "phase_id": req.phase_id})
+        phase = next((p for p in plan.phases if p.id == req.phase_id), None)
+        if phase and phase.chat:
+            db.add_message(req.session_id, "agent", phase.chat[-1].content,
+                           meta={"plan_id": req.plan_id, "phase_id": req.phase_id})
     return plan
 
 

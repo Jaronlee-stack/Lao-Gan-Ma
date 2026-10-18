@@ -18,6 +18,7 @@ from .models import (
     Plan,
     Phase,
     PhaseTask,
+    PhaseChatTurn,
     PlanRequest,
     AdaptRequest,
     Skill,
@@ -182,6 +183,111 @@ class PlanningAgent:
         plan.notes.append("Plan accepted — one-shot prompt and skills.md generated.")
         return one_shot, skills_md
 
+    # -- per-proposal decisions + discussion ----------------------------
+    def decide_phase(self, plan_id: str, phase_id: str, decision: str) -> Plan | None:
+        """Accept / reject / reset an individual proposal (phase)."""
+        plan = self._store.get(plan_id)
+        if plan is None:
+            return None
+        if decision not in ("accepted", "rejected", "pending"):
+            return plan
+        for ph in plan.phases:
+            if ph.id == phase_id:
+                ph.decision = decision
+                # Reflect the decision in the display status too.
+                if decision == "accepted":
+                    ph.status = "accepted"
+                elif decision == "rejected":
+                    ph.status = "rejected"
+                else:
+                    ph.status = "proposed"
+                plan.notes.append(f"Proposal '{ph.name}' {decision} by user.")
+                break
+        return plan
+
+    def chat_about_phase(self, plan_id: str, phase_id: str, message: str) -> Plan | None:
+        """Answer a user question about a specific proposal (phase).
+
+        The answer is grounded in that phase's goal, tasks, recommended
+        technologies, and the VERIFIED guidance of its skills (trust boundary:
+        unverified/blocked skill text is never fed to the LLM).
+        """
+        plan = self._store.get(plan_id)
+        if plan is None:
+            return None
+        phase = next((p for p in plan.phases if p.id == phase_id), None)
+        if phase is None:
+            return plan
+
+        # Build grounded context from verified skills only.
+        skill_by_id = {s.id: s for s in plan.skills_used}
+        guidance_lines = []
+        for sid in phase.recommended_skills:
+            s = skill_by_id.get(sid)
+            if not s:
+                continue
+            g = safe_instructions(s)
+            if g:
+                guidance_lines.append(f"- {s.name}: {g}")
+        guidance = "\n".join(guidance_lines) or "(no verified skill guidance for this phase)"
+
+        tasks = "\n".join(f"- {t.title}: {t.detail}" for t in phase.tasks)
+        system = (
+            "You are Lao Gan Ma, a trustworthy AI project-planning agent. Answer "
+            "the user's question about ONE specific phase of their project plan. "
+            "Explain reasoning, trade-offs and specifics. Base your answer only on "
+            "the phase context and verified guidance provided; if something is "
+            "outside that context, say so briefly. Be concise and practical."
+        )
+        prompt = (
+            f"Project idea: {plan.idea}\n"
+            f"Experience level: {plan.experience_level}\n\n"
+            f"Phase under discussion: {phase.name}\n"
+            f"Goal: {phase.goal}\n"
+            f"Recommended technologies: {', '.join(phase.recommended_tech) or 'n/a'}\n"
+            f"Tasks:\n{tasks}\n\n"
+            f"Verified skill guidance:\n{guidance}\n\n"
+            f"User question: {message}"
+        )
+        # With a real LLM, use its grounded answer. With the offline mock,
+        # the generic planning blurb isn't useful here, so use a grounded,
+        # phase-specific fallback instead.
+        if getattr(self._llm, "name", "") == "mock":
+            answer = self._grounded_phase_answer(phase, message, guidance_lines)
+        else:
+            answer = self._llm.complete(system=system, prompt=prompt)
+            if not answer or not answer.strip():
+                answer = self._grounded_phase_answer(phase, message, guidance_lines)
+
+        phase.chat.append(PhaseChatTurn(role="user", content=message))
+        phase.chat.append(PhaseChatTurn(role="agent", content=answer))
+        return plan
+
+    def _grounded_phase_answer(self, phase: Phase, message: str, guidance_lines: List[str]) -> str:
+        """Deterministic, phase-specific answer used when no live LLM is set.
+
+        Grounded entirely in the phase's own context so it's useful offline and
+        never leaks unverified skill text (guidance_lines are verified-only).
+        """
+        techs = ", ".join(phase.recommended_tech) or "the recommended tools"
+        parts = [
+            f"**{phase.name}** — {phase.goal}",
+            f"Why it's here: this phase addresses the \"{phase.name.lower()}\" part of your "
+            f"project and is planned around {techs}.",
+        ]
+        if phase.tasks:
+            parts.append("Key steps:\n" + "\n".join(f"• {t.title}" for t in phase.tasks[:5]))
+        if guidance_lines:
+            parts.append("Verified guidance applied here:\n" + "\n".join(guidance_lines[:4]))
+        parts.append(
+            "You can Accept this proposal to keep it, or Reject it to drop it from the "
+            "final plan and generated prompt."
+        )
+        parts.append(
+            "_(Grounded offline answer. Set a Groq API key for richer, free-form reasoning.)_"
+        )
+        return "\n\n".join(parts)
+
     def _verified_skills(self, plan: Plan) -> List[Skill]:
         return [s for s in plan.skills_used if s.trust_level == TrustLevel.VERIFIED]
 
@@ -203,11 +309,13 @@ class PlanningAgent:
         if techs:
             lines.append("\n# Recommended technology stack\n- " + "\n- ".join(techs))
 
-        # Phases.
+        # Phases — rejected proposals are excluded from the build prompt.
+        included = [ph for ph in plan.phases if ph.decision != "rejected"]
+        excluded = [ph for ph in plan.phases if ph.decision == "rejected"]
         lines.append("\n# Build plan (phases)")
-        for i, ph in enumerate(plan.phases, 1):
-            status = f" [{ph.status}]" if ph.status != "proposed" else ""
-            lines.append(f"\n## {i}. {ph.name}{status}\n{ph.goal}")
+        for i, ph in enumerate(included, 1):
+            flag = " [accepted]" if ph.decision == "accepted" else ""
+            lines.append(f"\n## {i}. {ph.name}{flag}\n{ph.goal}")
             if ph.recommended_tech:
                 lines.append("Technologies: " + ", ".join(ph.recommended_tech))
             for t in ph.tasks:
@@ -233,6 +341,11 @@ class PlanningAgent:
             "implements every phase above, with clear setup instructions and "
             "automated tests where practical."
         )
+        if excluded:
+            lines.append(
+                "\n# Explicitly excluded (rejected by the user)\nDo NOT implement: "
+                + ", ".join(ph.name for ph in excluded)
+            )
         lines.append(
             "\n> Note: guidance above comes from skills that passed Lao Gan Ma's "
             "verification (trust boundary). Untrusted/unverified skills were "

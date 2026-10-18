@@ -4,12 +4,7 @@ import { SkillsTab } from "./components/SkillsTab";
 import { HistoryTab } from "./components/HistoryTab";
 import { AcceptModal } from "./components/AcceptModal";
 import { FeedbackModal } from "./components/FeedbackModal";
-
-const phaseStatusStyles: Record<string, string> = {
-  proposed: "bg-slate-100 text-slate-600",
-  approved: "bg-emerald-100 text-emerald-700",
-  changed: "bg-blue-100 text-blue-700",
-};
+import { PhaseCard } from "./components/PhaseCard";
 
 type Tab = "planner" | "skills" | "history";
 
@@ -74,6 +69,16 @@ export default function App() {
   async function decide(approvalId: string, decision: "approve" | "reject") {
     if (!plan) return;
     setPlan(await api.approve(plan.id, approvalId, decision));
+  }
+
+  async function decidePhase(phaseId: string, decision: "accepted" | "rejected" | "pending") {
+    if (!plan) return;
+    setPlan(await api.decidePhase(plan.id, phaseId, decision));
+  }
+
+  async function chatPhase(phaseId: string, message: string) {
+    if (!plan) return;
+    setPlan(await api.chatPhase(plan.id, phaseId, message, sessionId ?? undefined));
   }
 
   async function acceptPlan() {
@@ -244,49 +249,19 @@ export default function App() {
                 )}
 
                 <div className="mt-5 space-y-4">
+                  <p className="text-xs text-slate-500">
+                    Review each proposal below — <b>Accept</b> or <b>Reject</b> it individually, or{" "}
+                    <b>💬 Discuss</b> its reasoning with the agent. Rejected proposals are excluded
+                    from the final prompt.
+                  </p>
                   {plan.phases.map((ph, idx) => (
-                    <div key={ph.id} className="border border-slate-200 rounded-lg p-4">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-slate-800">
-                          {idx + 1}. {ph.name}
-                        </h3>
-                        <span
-                          className={`text-xs px-2 py-0.5 rounded-full ${
-                            phaseStatusStyles[ph.status] ?? "bg-slate-100"
-                          }`}
-                        >
-                          {ph.status}
-                        </span>
-                      </div>
-                      <p className="text-sm text-slate-500 mt-1">{ph.goal}</p>
-                      {ph.recommended_tech.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {ph.recommended_tech.map((t) => (
-                            <span
-                              key={t}
-                              className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded"
-                            >
-                              {t}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      <ul className="mt-3 space-y-1.5">
-                        {ph.tasks.map((t, i) => (
-                          <li key={i} className="text-sm text-slate-700 flex gap-2">
-                            <span className="text-chili-500">▸</span>
-                            <span>
-                              <span className="font-medium">{t.title}</span>
-                              {t.approval_required && (
-                                <span className="ml-2 text-xs text-amber-600">(needs approval)</span>
-                              )}
-                              <br />
-                              <span className="text-slate-500 text-xs">{t.detail}</span>
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+                    <PhaseCard
+                      key={ph.id}
+                      phase={ph}
+                      index={idx}
+                      onDecide={decidePhase}
+                      onChat={chatPhase}
+                    />
                   ))}
                 </div>
 

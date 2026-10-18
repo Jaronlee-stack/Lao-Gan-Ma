@@ -22,6 +22,14 @@ allowed to influence the plan.
 
 ## Feature highlights (v2)
 
+- **Per-proposal accept / reject.** Every phase can be individually accepted or
+  rejected. Rejected proposals are excluded from the final plan, one-shot
+  prompt, and skills.md (the prompt even tells the coding agent *not* to build
+  them).
+- **Discuss any proposal.** A per-phase chat lets you ask the agent about the
+  reasoning, trade-offs, and specifics of a single proposal. Answers are
+  grounded in that phase's tasks and its *verified* skill guidance (trust
+  boundary preserved); persisted to chat history.
 - **Accept Plan → one-shot prompt.** Turns the finished plan into a single,
   ready-to-run prompt for a coding agent, built only from *verified* guidance.
 - **`skills.md` export.** Download or copy a Markdown file of every skill used
@@ -163,6 +171,8 @@ https://console.groq.com/keys
 | `GET`  | `/api/plan/{id}` | Fetch a plan |
 | `POST` | `/api/plan/adapt` | Re-plan after a change |
 | `POST` | `/api/plan/approve` | Approve/reject a gated action |
+| `POST` | `/api/plan/phase/decision` | Accept/reject an individual proposal |
+| `POST` | `/api/plan/phase/chat` | Discuss a specific proposal with the agent |
 | `POST` | `/api/plan/accept` | Finalize → one-shot prompt + skills.md + learn |
 | `GET`  | `/api/plan/{id}/skills.md` | Download skills.md |
 | `GET`  | `/api/sessions` | List chat sessions |

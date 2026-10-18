@@ -74,6 +74,12 @@ class PhaseTask(BaseModel):
     approval_required: bool = False
 
 
+class PhaseChatTurn(BaseModel):
+    role: str  # "user" | "agent"
+    content: str
+    created_at: str = Field(default_factory=_now)
+
+
 class Phase(BaseModel):
     id: str
     name: str
@@ -81,7 +87,12 @@ class Phase(BaseModel):
     tasks: List[PhaseTask] = Field(default_factory=list)
     recommended_skills: List[str] = Field(default_factory=list)  # skill ids
     recommended_tech: List[str] = Field(default_factory=list)
-    status: str = "proposed"  # proposed | approved | changed
+    # proposed | approved | changed | accepted | rejected
+    status: str = "proposed"
+    # Per-phase decision the user makes (independent of approval gating).
+    decision: str = "pending"  # pending | accepted | rejected
+    # Threaded discussion about this specific proposal.
+    chat: List[PhaseChatTurn] = Field(default_factory=list)
 
 
 class Plan(BaseModel):
@@ -108,6 +119,22 @@ class ApprovalRequest(BaseModel):
     approval_id: str
     decision: str = Field("approve", description="approve | reject")
     note: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Per-proposal (phase) decisions + discussion
+# ---------------------------------------------------------------------------
+class PhaseDecisionRequest(BaseModel):
+    plan_id: str
+    phase_id: str
+    decision: str = Field(..., description="accepted | rejected | pending")
+
+
+class PhaseChatRequest(BaseModel):
+    plan_id: str
+    phase_id: str
+    message: str = Field(..., min_length=1)
+    session_id: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
