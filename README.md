@@ -43,16 +43,34 @@ skills. This guarantees unverified or blocked instructions (e.g. the seeded
 prompt-injection sample `skill-untrusted-sample`) can never influence a
 generated plan.
 
-## Run it
+## Run it — one command
 
 ```bash
 ./run.sh
 ```
 
-Then open http://127.0.0.1:5173. The Vite dev server proxies `/api` to the
+That's it. `run.sh` installs all dependencies if they're missing (creates the
+Python virtualenv + `pip install`, and `npm install`), starts the backend and
+frontend, and stops both cleanly on **Ctrl+C**.
+
+Then open **http://127.0.0.1:5173**. The Vite dev server proxies `/api` to the
 backend on port 8000.
 
-### Run manually
+Requirements: `python3` and `npm` (Node.js) on your PATH.
+
+### Download dependencies only
+If you just want to install everything without starting the app:
+
+```bash
+./install.sh          # or:  ./run.sh --install
+```
+
+Flags:
+- `./run.sh --install` — install dependencies, then exit
+- `./run.sh --force`   — reinstall all dependencies (wipes `.venv` and
+  `node_modules`), then start
+
+### Run manually (two terminals)
 ```bash
 # backend
 cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
