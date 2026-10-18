@@ -1,13 +1,27 @@
 """Pluggable LLM interface with an offline mock fallback.
 
-If an OpenAI-compatible API key is present the OpenAIClient is used; otherwise
-the MockClient produces deterministic, structured output so the demo always
-runs. The agent only depends on the `LLMClient.complete` contract.
+If a Groq API key is configured the GroqClient is used; otherwise the
+MockClient produces deterministic, structured output so the demo always runs.
+The agent only depends on the `LLMClient.complete` contract.
+
+Groq exposes an OpenAI-compatible endpoint, so we reuse the `openai` SDK and
+simply point its base_url at Groq. Free, open-weight models (e.g. Llama) are
+available on Groq's free developer tier.
 """
 from __future__ import annotations
 
 import os
 from typing import Protocol
+
+# add credentials: set your Groq API key here (or via the GROQ_API_KEY env var).
+# Get a free key at https://console.groq.com/keys
+GROQ_API_KEY = ""
+
+# Groq's OpenAI-compatible base URL.
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+
+# Free, open-weight model on Groq's free tier.
+GROQ_DEFAULT_MODEL = "llama-3.1-8b-instant"
 
 
 class LLMClient(Protocol):
@@ -36,20 +50,24 @@ class MockClient:
         )
 
 
-class OpenAIClient:
-    """Thin OpenAI wrapper, only constructed when a key is configured."""
+class GroqClient:
+    """Groq LLM client via the OpenAI-compatible endpoint.
 
-    name = "openai"
+    Only constructed when a Groq API key is configured. Falls back to the mock
+    narration if the API call fails, so the demo never breaks.
+    """
 
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
+    name = "groq"
+
+    def __init__(self, api_key: str, model: str = GROQ_DEFAULT_MODEL):
         self._api_key = api_key
         self._model = model
 
     def complete(self, system: str, prompt: str) -> str:
         try:
-            from openai import OpenAI  # imported lazily; optional dependency
+            from openai import OpenAI  # Groq is OpenAI-compatible
 
-            client = OpenAI(api_key=self._api_key)
+            client = OpenAI(api_key=self._api_key, base_url=GROQ_BASE_URL)
             resp = client.chat.completions.create(
                 model=self._model,
                 messages=[
@@ -64,8 +82,9 @@ class OpenAIClient:
 
 
 def get_llm() -> LLMClient:
-    api_key = os.getenv("OPENAI_API_KEY")
+    # Prefer an env var; fall back to the inline GROQ_API_KEY constant above.
+    api_key = os.getenv("GROQ_API_KEY") or GROQ_API_KEY
     if api_key:
-        model = os.getenv("LGM_LLM_MODEL", "gpt-4o-mini")
-        return OpenAIClient(api_key=api_key, model=model)
+        model = os.getenv("LGM_LLM_MODEL", GROQ_DEFAULT_MODEL)
+        return GroqClient(api_key=api_key, model=model)
     return MockClient()

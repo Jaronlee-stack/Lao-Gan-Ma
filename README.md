@@ -62,10 +62,19 @@ cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 cd frontend && npm install && npm run dev
 ```
 
-### Optional: real LLM
-Set `OPENAI_API_KEY` (and optionally `LGM_LLM_MODEL`) before starting the
-backend to use a real model for narration; otherwise a deterministic offline
-mock is used so the demo always runs.
+### Optional: real LLM (Groq)
+The agent uses **Groq** (via its OpenAI-compatible endpoint) for narration.
+Groq offers a free developer tier with open-weight models; the default is the
+free `llama-3.1-8b-instant`.
+
+Add your key either way:
+- **Env var (recommended):** `export GROQ_API_KEY=gsk_...`
+- **Inline:** set the `GROQ_API_KEY` constant in `backend/app/llm.py` (look for
+  the `# add credentials` comment).
+
+Optionally override the model with `LGM_LLM_MODEL`. Without a key, a
+deterministic offline mock is used so the demo always runs. Get a free key at
+https://console.groq.com/keys
 
 ## API
 
