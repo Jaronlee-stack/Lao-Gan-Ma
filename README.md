@@ -65,20 +65,26 @@ generated plan.
 
 **Requirements:** Python 3 and Node.js (npm) on your PATH.
 
-### 🪟 Windows
-From the project folder, in **PowerShell**:
-```powershell
-.\run.ps1
+### 🪟 Windows — simplest
+From the project folder, in **PowerShell** or **cmd**, just type:
 ```
-…or just **double-click `run.bat`** (this avoids PowerShell execution-policy
-prompts).
+go
+```
+That's the whole command (no `.\`, no extension — Windows runs `go.bat` by
+name). You can also **double-click `go.bat`** in File Explorer.
+
+Other equivalents that work anywhere:
+```
+npm start          # cross-platform (needs Node)
+.\run.ps1          # direct PowerShell script
+```
 
 > Don't use `bash run.sh` on Windows unless you have WSL or Git Bash — plain
 > PowerShell has no `bash`.
 
 ### 🍎 macOS / 🐧 Linux
 ```bash
-./run.sh
+./run.sh           # or:  npm start
 ```
 
 Either runner installs all dependencies if missing (creates the Python

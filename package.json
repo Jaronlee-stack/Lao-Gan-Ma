@@ -1,0 +1,10 @@
+{
+  "name": "lao-gan-ma",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Lao Gan Ma - autonomous AI project-planning agent. Root launcher scripts.",
+  "scripts": {
+    "start": "node start.mjs",
+    "install-deps": "node start.mjs --install"
+  }
+}
