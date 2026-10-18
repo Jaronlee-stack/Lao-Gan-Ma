@@ -26,6 +26,7 @@ from .models import (
 from .skilldb import skill_db
 from .verification import safe_instructions
 from .llm import get_llm
+from . import preferences
 
 # Canonical lifecycle phases. Each maps to the skill categories it draws from.
 _PHASE_BLUEPRINT = [
@@ -52,6 +53,20 @@ class PlanningAgent:
     # -- discovery -------------------------------------------------------
     def _skills_for(self, categories: List[str], discovered: List[Skill]) -> List[Skill]:
         return [s for s in discovered if s.category in categories]
+
+    def _apply_learned_bias(self, discovered: List[Skill]) -> List[Skill]:
+        """Re-order discovered skills so learned-favourite technologies surface
+        first. Pure re-ranking — never adds unverified skills or changes trust.
+        """
+        favs = {t.lower() for t in preferences.preferred_techs()}
+        if not favs:
+            return discovered
+
+        def boost(skill: Skill) -> int:
+            return sum(1 for t in skill.technologies if t.lower() in favs)
+
+        # Stable sort by boost descending keeps original relevance as tiebreak.
+        return sorted(discovered, key=boost, reverse=True)
 
     def _build_phases(self, discovered: List[Skill], experience: str) -> List[Phase]:
         phases: List[Phase] = []
@@ -114,6 +129,7 @@ class PlanningAgent:
     # -- public API ------------------------------------------------------
     def plan(self, req: PlanRequest) -> Plan:
         discovered = skill_db.discover(req.idea, req.experience_level, limit=12)
+        discovered = self._apply_learned_bias(discovered)
         phases = self._build_phases(discovered, req.experience_level)
 
         pending = [
@@ -142,8 +158,125 @@ class PlanningAgent:
                 f"Verification blocked {len(blocked)} untrusted skill(s): {', '.join(blocked)}."
             )
 
+        # Surface what the agent has learned (transparent self-learning).
+        pref_note = preferences.preference_summary().get("note")
+        if pref_note:
+            plan.notes.append(f"Personalisation: {pref_note}")
+
         self._store[plan.id] = plan
         return plan
+
+    # -- accept: generate one-shot prompt + skills.md --------------------
+    def accept(self, plan_id: str) -> tuple[str, str] | None:
+        """Finalise a plan: returns (one_shot_prompt, skills_markdown) and
+        reinforces learned preferences. Returns None if the plan is unknown."""
+        plan = self._store.get(plan_id)
+        if plan is None:
+            return None
+
+        # Learn from this acceptance.
+        preferences.learn_from_accept(plan)
+
+        one_shot = self._build_one_shot_prompt(plan)
+        skills_md = self._build_skills_markdown(plan)
+        plan.notes.append("Plan accepted — one-shot prompt and skills.md generated.")
+        return one_shot, skills_md
+
+    def _verified_skills(self, plan: Plan) -> List[Skill]:
+        return [s for s in plan.skills_used if s.trust_level == TrustLevel.VERIFIED]
+
+    def _build_one_shot_prompt(self, plan: Plan) -> str:
+        """Compose a single, copy-paste-ready prompt for a coding agent."""
+        lines: List[str] = []
+        lines.append(
+            "You are an expert full-stack engineer. Build the following project "
+            "end to end, following the phased plan and verified best-practice "
+            "guidance below. Ask for clarification only if a requirement is "
+            "ambiguous; otherwise implement it completely."
+        )
+        lines.append("")
+        lines.append(f"# Project idea\n{plan.idea}")
+        lines.append(f"\n# Target experience level\n{plan.experience_level}")
+
+        # Recommended stack (verified skills only).
+        techs = sorted({t for s in self._verified_skills(plan) for t in s.technologies})
+        if techs:
+            lines.append("\n# Recommended technology stack\n- " + "\n- ".join(techs))
+
+        # Phases.
+        lines.append("\n# Build plan (phases)")
+        for i, ph in enumerate(plan.phases, 1):
+            status = f" [{ph.status}]" if ph.status != "proposed" else ""
+            lines.append(f"\n## {i}. {ph.name}{status}\n{ph.goal}")
+            if ph.recommended_tech:
+                lines.append("Technologies: " + ", ".join(ph.recommended_tech))
+            for t in ph.tasks:
+                # Only verified guidance (safe_instructions already enforced at
+                # build time) reaches the prompt. Skip placeholder/withheld.
+                detail = t.detail
+                if detail.startswith("[") and detail.endswith("]"):
+                    lines.append(f"- {t.title}")
+                else:
+                    lines.append(f"- {t.title}: {detail}")
+
+        # Best-practice guidance block from verified skills.
+        guidance = [
+            f"- **{s.name}** ({', '.join(s.technologies)}): {safe_instructions(s)}"
+            for s in self._verified_skills(plan)
+            if safe_instructions(s)
+        ]
+        if guidance:
+            lines.append("\n# Verified best-practice guidance\n" + "\n".join(guidance))
+
+        lines.append(
+            "\n# Deliverables\nProduce a working, well-structured codebase that "
+            "implements every phase above, with clear setup instructions and "
+            "automated tests where practical."
+        )
+        lines.append(
+            "\n> Note: guidance above comes from skills that passed Lao Gan Ma's "
+            "verification (trust boundary). Untrusted/unverified skills were "
+            "excluded."
+        )
+        return "\n".join(lines)
+
+    def _build_skills_markdown(self, plan: Plan) -> str:
+        """Render all skills used in this plan as a skills.md document."""
+        md: List[str] = []
+        md.append(f"# Skills for: {plan.idea}\n")
+        md.append(
+            "_Generated by Lao Gan Ma. Each skill below shows its verification "
+            "status. Only **verified** skills contribute guidance to the plan._\n"
+        )
+        verified = [s for s in plan.skills_used if s.trust_level == TrustLevel.VERIFIED]
+        others = [s for s in plan.skills_used if s.trust_level != TrustLevel.VERIFIED]
+
+        def render(s: Skill) -> str:
+            badge = {"verified": "✅", "unverified": "⚠️", "blocked": "🛑"}.get(
+                s.trust_level.value, "?"
+            )
+            block = [
+                f"## {badge} {s.name}  \n",
+                f"- **Category:** {s.category}",
+                f"- **Trust:** {s.trust_level.value}",
+                f"- **Technologies:** {', '.join(s.technologies) or '—'}",
+                f"- **Summary:** {s.summary}",
+            ]
+            if s.trust_level == TrustLevel.VERIFIED and s.instructions:
+                block.append(f"- **Guidance:** {s.instructions}")
+            elif s.trust_level == TrustLevel.BLOCKED:
+                block.append("- **Guidance:** _withheld — skill failed verification_")
+            else:
+                block.append("- **Guidance:** _withheld — pending verification_")
+            return "\n".join(block) + "\n"
+
+        if verified:
+            md.append("# Verified skills\n")
+            md.extend(render(s) for s in verified)
+        if others:
+            md.append("# Excluded / unverified skills\n")
+            md.extend(render(s) for s in others)
+        return "\n".join(md)
 
     def get(self, plan_id: str) -> Plan | None:
         return self._store.get(plan_id)

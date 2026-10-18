@@ -16,6 +16,22 @@ allowed to influence the plan.
 | **Adapts when things change** | `/api/plan/adapt` re-discovers skills and re-plans when a constraint or scope change arrives, flagging exactly which phases moved. |
 | **Seeks human approval before consequential actions** | Security, database, and deployment phases are gated. Nothing consequential proceeds without an explicit human `approve`/`reject`. |
 | **Trustworthy** | Every skill is run through a **verification engine** (signature/allowlist + prompt-injection + dangerous-command screening). Unverified skills are treated as inert data; malicious skills are **blocked** and can never reach the planner. |
+| **Finishes the job** | **Accept Plan** generates a copy-paste **one-shot prompt** for any coding agent, plus a downloadable **`skills.md`**. |
+| **Learns the user** | Chat history, star ratings, and accepted plans are persisted in **SQLite**; the agent **self-learns** preferred technologies/experience and biases future plans accordingly (transparently — inspect via `/api/preferences`). |
+
+## Feature highlights (v2)
+
+- **Accept Plan → one-shot prompt.** Turns the finished plan into a single,
+  ready-to-run prompt for a coding agent, built only from *verified* guidance.
+- **`skills.md` export.** Download or copy a Markdown file of every skill used
+  (with trust status) to drop into your own prompt.
+- **Skills tab.** Browse all skills with **search + category + trust-level
+  filters**.
+- **Chat history.** Every planning conversation is stored in SQLite and
+  browsable in the History tab.
+- **Feedback.** A 1–5 star + remarks modal after accepting, stored in SQLite.
+- **Self-learning.** Accepted plans and good ratings reinforce preferences;
+  poor ratings discount them. Future plans surface and apply what was learned.
 
 ## Architecture
 
@@ -121,6 +137,13 @@ https://console.groq.com/keys
 | `GET`  | `/api/plan/{id}` | Fetch a plan |
 | `POST` | `/api/plan/adapt` | Re-plan after a change |
 | `POST` | `/api/plan/approve` | Approve/reject a gated action |
+| `POST` | `/api/plan/accept` | Finalize → one-shot prompt + skills.md + learn |
+| `GET`  | `/api/plan/{id}/skills.md` | Download skills.md |
+| `GET`  | `/api/sessions` | List chat sessions |
+| `GET`  | `/api/sessions/{id}/messages` | Session transcript |
+| `POST` | `/api/feedback` | Submit 1–5 star rating + remarks |
+| `GET`  | `/api/feedback` | Feedback items + stats |
+| `GET`  | `/api/preferences` | What the agent has learned |
 
 ## Tests
 ```bash

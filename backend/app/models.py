@@ -65,6 +65,7 @@ class PlanRequest(BaseModel):
     experience_level: str = Field("intermediate", description="beginner | intermediate | advanced")
     preferences: List[str] = Field(default_factory=list, description="Preferred technologies/tools")
     constraints: List[str] = Field(default_factory=list, description="Deadlines, budget, platform limits")
+    session_id: Optional[str] = Field(None, description="Existing chat session to append to")
 
 
 class PhaseTask(BaseModel):
@@ -107,3 +108,45 @@ class ApprovalRequest(BaseModel):
     approval_id: str
     decision: str = Field("approve", description="approve | reject")
     note: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Accept / one-shot prompt / skills export
+# ---------------------------------------------------------------------------
+class AcceptRequest(BaseModel):
+    plan_id: str
+    session_id: Optional[str] = None
+
+
+class AcceptResult(BaseModel):
+    plan_id: str
+    one_shot_prompt: str
+    skills_markdown: str
+    learned: Dict[str, Any] = Field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Chat history
+# ---------------------------------------------------------------------------
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+    meta: Optional[Dict[str, Any]] = None
+    created_at: Optional[str] = None
+
+
+class SessionSummary(BaseModel):
+    id: str
+    title: str
+    created_at: str
+    message_count: int
+
+
+# ---------------------------------------------------------------------------
+# Feedback
+# ---------------------------------------------------------------------------
+class FeedbackRequest(BaseModel):
+    plan_id: Optional[str] = None
+    session_id: Optional[str] = None
+    rating: int = Field(..., ge=1, le=5)
+    remarks: str = ""

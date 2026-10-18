@@ -4,6 +4,11 @@ __pycache__/
 backend/.venv/
 .env
 
+# SQLite runtime database
+backend/app/data/*.db
+backend/app/data/*.db-wal
+backend/app/data/*.db-shm
+
 # Node
 node_modules/
 frontend/dist/
