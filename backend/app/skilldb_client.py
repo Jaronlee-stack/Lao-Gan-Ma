@@ -192,3 +192,42 @@ def ping() -> bool:
         return True
     except Exception:
         return False
+
+
+# SkillDB caps page size at 50 regardless of the requested limit.
+MAX_PAGE = 50
+
+
+def browse(offset: int = 0, limit: int = 50, search: str = "", domain: str = "") -> Dict[str, Any]:
+    """Browse the SkillDB catalogue with pagination.
+
+    Returns {"skills": [Skill...], "total": int, "offset": int, "has_more": bool}.
+    No search term lists everything; a search term or domain narrows it.
+    """
+    params: Dict[str, Any] = {"limit": min(limit, MAX_PAGE), "offset": offset}
+    if search:
+        params["search"] = search
+    if domain:
+        params["category"] = domain
+    data = _get("/skills", params)
+    pag = data.get("pagination", {})
+    skills = [
+        _to_skill(item, instructions=item.get("content_preview") or item.get("description") or "")
+        for item in data.get("skills", [])
+    ]
+    return {
+        "skills": skills,
+        "total": pag.get("total", len(skills)),
+        "offset": pag.get("offset", offset),
+        "limit": pag.get("limit", limit),
+        "has_more": pag.get("hasMore", False),
+    }
+
+
+def domains() -> List[str]:
+    """The list of SkillDB domain/category names (from the API meta block)."""
+    try:
+        data = _get("/skills", {"limit": 1})
+    except Exception:
+        return []
+    return data.get("meta", {}).get("categories", []) or []

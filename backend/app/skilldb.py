@@ -94,6 +94,55 @@ class SkillDB:
             self.live_status = "offline"
         return self.live_status
 
+    def browse(self, offset: int = 0, limit: int = 50, search: str = "", domain: str = "") -> Dict:
+        """Browse the SkillDB catalogue with pagination + verification.
+
+        Live: pages through skilldb.dev. Offline/disabled: returns the local
+        seed store (filtered by the search term client-side).
+        """
+        if _LIVE_ENABLED:
+            try:
+                page = skilldb_client.browse(offset=offset, limit=limit, search=search, domain=domain)
+                self.live_status = "ok"
+                verified = []
+                for s in page["skills"]:
+                    vs = apply_verification(s)
+                    self._live_cache[vs.id] = vs
+                    verified.append(vs)
+                page["skills"] = verified
+                page["source"] = "skilldb.dev"
+                return page
+            except Exception:
+                self.live_status = "offline"
+        else:
+            self.live_status = "disabled"
+
+        # Local fallback.
+        local = self._skills
+        if search:
+            q = search.lower()
+            local = [
+                s for s in local
+                if q in (s.name + " " + s.summary + " " + " ".join(s.technologies)).lower()
+            ]
+        window = local[offset: offset + limit]
+        return {
+            "skills": window,
+            "total": len(local),
+            "offset": offset,
+            "limit": limit,
+            "has_more": offset + limit < len(local),
+            "source": "local",
+        }
+
+    def domains(self) -> List[str]:
+        if _LIVE_ENABLED:
+            d = skilldb_client.domains()
+            if d:
+                return d
+        # Local categories as fallback.
+        return sorted({s.category for s in self._skills})
+
     def _score(self, skill: Skill, idea: str, experience: str) -> float:
         idea_lc = idea.lower()
         tokens = set(re.findall(r"[a-z0-9]+", idea_lc))

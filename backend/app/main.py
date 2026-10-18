@@ -80,6 +80,21 @@ def discover_skills(idea: str, experience: str = "intermediate") -> list[Skill]:
     return skill_db.discover(idea, experience)
 
 
+@app.get("/api/skills/browse")
+def browse_skills(offset: int = 0, limit: int = 50, search: str = "", domain: str = "") -> dict:
+    """Browse the full SkillDB catalogue (paginated, verified).
+
+    When live, pages through skilldb.dev's ~6,000+ skills. When offline or
+    disabled, returns the local seed store.
+    """
+    return skill_db.browse(offset=offset, limit=limit, search=search, domain=domain)
+
+
+@app.get("/api/skills/domains")
+def skill_domains() -> dict:
+    return {"domains": skill_db.domains()}
+
+
 @app.post("/api/skills/{skill_id}/verify", response_model=Skill)
 def verify(skill_id: str) -> Skill:
     skill = skill_db.get(skill_id)

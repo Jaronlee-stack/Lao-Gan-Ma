@@ -154,5 +154,26 @@ export const api = {
       json<{ provider: string; url: string; live_status: string; note: string }>(r)
     ),
 
+  browseSkills: (params: { offset?: number; limit?: number; search?: string; domain?: string }) => {
+    const q = new URLSearchParams();
+    if (params.offset != null) q.set("offset", String(params.offset));
+    if (params.limit != null) q.set("limit", String(params.limit));
+    if (params.search) q.set("search", params.search);
+    if (params.domain) q.set("domain", params.domain);
+    return fetch(`/api/skills/browse?${q.toString()}`).then((r) =>
+      json<{
+        skills: Skill[];
+        total: number;
+        offset: number;
+        limit: number;
+        has_more: boolean;
+        source: string;
+      }>(r)
+    );
+  },
+
+  skillDomains: () =>
+    fetch("/api/skills/domains").then((r) => json<{ domains: string[] }>(r)),
+
   skillsMarkdownUrl: (plan_id: string) => `/api/plan/${plan_id}/skills.md`,
 };

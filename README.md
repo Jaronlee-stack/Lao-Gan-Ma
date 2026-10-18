@@ -26,8 +26,9 @@ allowed to influence the plan.
   ready-to-run prompt for a coding agent, built only from *verified* guidance.
 - **`skills.md` export.** Download or copy a Markdown file of every skill used
   (with trust status) to drop into your own prompt.
-- **Skills tab.** Browse all skills with **search + category + trust-level
-  filters**.
+- **Skills tab = full SkillDB catalogue.** When live, browse **all ~6,000+
+  SkillDB skills** with server-side pagination, full-text search, domain
+  filter (38 domains), and a trust-level filter. Every page is verified.
 - **Chat history.** Every planning conversation is stored in SQLite and
   browsable in the History tab.
 - **Feedback.** A 1–5 star + remarks modal after accepting, stored in SQLite.
@@ -154,6 +155,8 @@ https://console.groq.com/keys
 | `GET`  | `/api/health` | Liveness check |
 | `GET`  | `/api/skills` | All skills with verification status |
 | `GET`  | `/api/skills/source` | SkillDB provider + live/offline status |
+| `GET`  | `/api/skills/browse` | Paginated catalogue (offset/limit/search/domain) |
+| `GET`  | `/api/skills/domains` | SkillDB domain list |
 | `GET`  | `/api/skills/discover?idea=…` | Rank skills for an idea |
 | `POST` | `/api/skills/{id}/verify` | Re-run verification on a skill |
 | `POST` | `/api/plan` | Create a plan from an idea |
