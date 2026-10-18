@@ -1,11 +1,16 @@
-import { useMemo, useState } from "react";
-import { Skill, TrustLevel } from "../api";
+import { useEffect, useMemo, useState } from "react";
+import { api, Skill, TrustLevel } from "../api";
 import { TrustBadge } from "./TrustBadge";
 
 export function SkillsTab({ skills }: { skills: Skill[] }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
   const [trust, setTrust] = useState<"all" | TrustLevel>("all");
+  const [source, setSource] = useState<{ live_status: string; url: string } | null>(null);
+
+  useEffect(() => {
+    api.skillsSource().then(setSource).catch(() => {});
+  }, []);
 
   const categories = useMemo(
     () => ["all", ...Array.from(new Set(skills.map((s) => s.category))).sort()],
@@ -31,9 +36,41 @@ export function SkillsTab({ skills }: { skills: Skill[] }) {
           {filtered.length} / {skills.length} skills
         </span>
       </div>
-      <p className="text-xs text-slate-500 mb-4">
+      <p className="text-xs text-slate-500 mb-2">
         Browse every skill. Only <b>verified</b> skills can influence a plan.
       </p>
+      <div className="flex items-center gap-2 mb-4 text-xs">
+        <span className="text-slate-500">
+          Source:{" "}
+          <a
+            href={source?.url || "https://skilldb.dev"}
+            target="_blank"
+            rel="noreferrer"
+            className="text-chili-600 underline"
+          >
+            SkillDB (skilldb.dev)
+          </a>
+        </span>
+        {source && (
+          <span
+            className={`px-2 py-0.5 rounded-full border ${
+              source.live_status === "ok"
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : source.live_status === "offline"
+                ? "bg-amber-50 text-amber-700 border-amber-200"
+                : "bg-slate-100 text-slate-500 border-slate-200"
+            }`}
+          >
+            {source.live_status === "ok"
+              ? "● live"
+              : source.live_status === "offline"
+              ? "● offline (local fallback)"
+              : source.live_status === "disabled"
+              ? "● local only"
+              : "● idle"}
+          </span>
+        )}
+      </div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-4">

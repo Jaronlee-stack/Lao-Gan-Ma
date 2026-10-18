@@ -149,5 +149,10 @@ export const api = {
 
   preferences: () => fetch("/api/preferences").then((r) => json<LearnedPrefs>(r)),
 
+  skillsSource: () =>
+    fetch("/api/skills/source").then((r) =>
+      json<{ provider: string; url: string; live_status: string; note: string }>(r)
+    ),
+
   skillsMarkdownUrl: (plan_id: string) => `/api/plan/${plan_id}/skills.md`,
 };

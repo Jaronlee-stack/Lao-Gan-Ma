@@ -55,6 +55,19 @@ def list_skills() -> list[Skill]:
     return skill_db.all()
 
 
+@app.get("/api/skills/source")
+def skills_source() -> dict:
+    """Where skills come from, for UI attribution."""
+    return {
+        "provider": "SkillDB",
+        "url": "https://skilldb.dev",
+        "live_status": skill_db.live_status,
+        "note": "Skills are discovered from the SkillDB service and verified "
+        "before they can influence a plan. Falls back to a local seed store "
+        "when offline.",
+    }
+
+
 @app.get("/api/skills/discover", response_model=list[Skill])
 def discover_skills(idea: str, experience: str = "intermediate") -> list[Skill]:
     return skill_db.discover(idea, experience)

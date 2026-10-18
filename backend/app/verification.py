@@ -21,8 +21,12 @@ from typing import List
 from .models import Skill, TrustLevel, VerificationReport, VerificationFinding
 
 # Sources we trust to produce signed skills.
-TRUSTED_SOURCES = {"skilldb"}
-SIGNATURE_PREFIX = "LGM-SIG-"
+#   "skilldb"     -> our local seeded store (signed LGM-SIG-*)
+#   "skilldb.dev" -> the real SkillDB service (signed SKILLDB-*)
+# A trusted source still only earns VERIFIED after passing the injection and
+# dangerous-command screens below — trust is necessary, not sufficient.
+TRUSTED_SOURCES = {"skilldb", "skilldb.dev"}
+SIGNATURE_PREFIXES = ("LGM-SIG-", "SKILLDB-")
 
 # Patterns that indicate an attempt to hijack the agent (prompt injection).
 _INJECTION_PATTERNS = [
@@ -54,7 +58,7 @@ def _signature_ok(skill: Skill) -> bool:
         return False
     if not skill.signature:
         return False
-    return skill.signature.startswith(SIGNATURE_PREFIX)
+    return skill.signature.startswith(SIGNATURE_PREFIXES)
 
 
 def verify_skill(skill: Skill) -> VerificationReport:

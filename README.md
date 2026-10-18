@@ -15,7 +15,8 @@ allowed to influence the plan.
 | **Plans & completes a meaningful task** | Converts an idea into a 9-phase software project plan (requirements → design → frontend → backend → database → security → ML → testing → deploy), each phase backed by matched skills and technologies. |
 | **Adapts when things change** | `/api/plan/adapt` re-discovers skills and re-plans when a constraint or scope change arrives, flagging exactly which phases moved. |
 | **Seeks human approval before consequential actions** | Security, database, and deployment phases are gated. Nothing consequential proceeds without an explicit human `approve`/`reject`. |
-| **Trustworthy** | Every skill is run through a **verification engine** (signature/allowlist + prompt-injection + dangerous-command screening). Unverified skills are treated as inert data; malicious skills are **blocked** and can never reach the planner. |
+| **Intelligent skill discovery** | Discovers relevant skills live from the real **[SkillDB](https://skilldb.dev)** service (key-less public API, ~6,000+ skills), with a seeded local store as an offline fallback. |
+| **Trustworthy** | Every skill — *including those fetched from SkillDB* — is run through a **verification engine** (signature/allowlist + prompt-injection + dangerous-command screening). Unverified skills are treated as inert data; malicious skills are **blocked** and can never reach the planner. Trust is necessary but not sufficient: even a skill from the trusted SkillDB source is blocked if its content contains an injection. |
 | **Finishes the job** | **Accept Plan** generates a copy-paste **one-shot prompt** for any coding agent, plus a downloadable **`skills.md`**. |
 | **Learns the user** | Chat history, star ratings, and accepted plans are persisted in **SQLite**; the agent **self-learns** preferred technologies/experience and biases future plans accordingly (transparently — inspect via `/api/preferences`). |
 
@@ -42,7 +43,8 @@ Lao-Gan-Ma/
 │   │   ├── main.py          # REST API
 │   │   ├── models.py        # Pydantic schemas
 │   │   ├── agent.py         # plan() / adapt() / approve()
-│   │   ├── skilldb.py       # seeded skill store + discovery
+│   │   ├── skilldb.py       # discovery: live SkillDB + local fallback
+│   │   ├── skilldb_client.py# client for the real skilldb.dev API
 │   │   ├── verification.py  # trust/verification engine (the trust boundary)
 │   │   ├── llm.py           # pluggable LLM + offline mock fallback
 │   │   └── data/skills.json # seeded skills (incl. one malicious sample)
@@ -111,6 +113,20 @@ cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 cd frontend && npm install && npm run dev
 ```
 
+### Skill source: SkillDB (skilldb.dev)
+Skills are discovered live from **[SkillDB](https://skilldb.dev)** via its
+public, key-less REST API (`/api/v1/skills?search=…`). Results are mapped into
+our `Skill` model and **verified** before use. If the API is unreachable the
+app falls back to a seeded local store, so it always runs offline.
+
+- Disable live discovery (local-only): `export LGM_SKILLDB_LIVE=0`
+- The Skills tab shows a **live / offline / local-only** status badge and links
+  back to skilldb.dev for attribution.
+
+> Skill metadata and content previews are retrieved from SkillDB
+> (https://skilldb.dev). Full skill bodies require a SkillDB paid plan; the
+> free tier (used here) provides rich metadata plus a content preview.
+
 ### Optional: real LLM (Groq)
 The agent uses **Groq** (via its OpenAI-compatible endpoint) for narration.
 Groq offers a free developer tier with open-weight models; the default is the
@@ -131,6 +147,7 @@ https://console.groq.com/keys
 | --- | --- | --- |
 | `GET`  | `/api/health` | Liveness check |
 | `GET`  | `/api/skills` | All skills with verification status |
+| `GET`  | `/api/skills/source` | SkillDB provider + live/offline status |
 | `GET`  | `/api/skills/discover?idea=…` | Rank skills for an idea |
 | `POST` | `/api/skills/{id}/verify` | Re-run verification on a skill |
 | `POST` | `/api/plan` | Create a plan from an idea |
