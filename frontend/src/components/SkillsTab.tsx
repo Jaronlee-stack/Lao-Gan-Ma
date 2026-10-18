@@ -67,7 +67,7 @@ export function SkillsTab({ skills }: { skills: Skill[] }) {
               ? "● offline (local fallback)"
               : source.live_status === "disabled"
               ? "● local only"
-              : "● idle"}
+              : "● checking…"}
           </span>
         )}
       </div>

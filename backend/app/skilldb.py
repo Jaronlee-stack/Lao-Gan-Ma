@@ -82,6 +82,18 @@ class SkillDB:
         self.live_status = "ok"
         return verified
 
+    def health_check(self) -> str:
+        """Probe SkillDB and update live_status. Cheap enough to call on the
+        status endpoint so the UI reflects reachability before any plan runs.
+        """
+        if not _LIVE_ENABLED:
+            self.live_status = "disabled"
+        elif skilldb_client.ping():
+            self.live_status = "ok"
+        else:
+            self.live_status = "offline"
+        return self.live_status
+
     def _score(self, skill: Skill, idea: str, experience: str) -> float:
         idea_lc = idea.lower()
         tokens = set(re.findall(r"[a-z0-9]+", idea_lc))

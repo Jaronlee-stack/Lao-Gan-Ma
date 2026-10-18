@@ -57,11 +57,18 @@ def list_skills() -> list[Skill]:
 
 @app.get("/api/skills/source")
 def skills_source() -> dict:
-    """Where skills come from, for UI attribution."""
+    """Where skills come from, for UI attribution.
+
+    Runs a live reachability probe (unless already determined) so the UI shows
+    an accurate live/offline status immediately, not a stale 'idle'.
+    """
+    status = skill_db.live_status
+    if status in ("idle", "offline"):
+        status = skill_db.health_check()
     return {
         "provider": "SkillDB",
         "url": "https://skilldb.dev",
-        "live_status": skill_db.live_status,
+        "live_status": status,
         "note": "Skills are discovered from the SkillDB service and verified "
         "before they can influence a plan. Falls back to a local seed store "
         "when offline.",

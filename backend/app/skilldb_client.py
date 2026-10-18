@@ -183,3 +183,12 @@ def fetch_detail(skill_id_path: str) -> Dict[str, Any]:
     """Fetch a single skill's detail (incl. content_preview + upgrade_note)."""
     enc = urllib.parse.quote(skill_id_path, safe="")
     return _get(f"/skills/{enc}")
+
+
+def ping() -> bool:
+    """Lightweight reachability check against the SkillDB API."""
+    try:
+        _get("/skills", {"search": "react", "limit": 1})
+        return True
+    except Exception:
+        return False
