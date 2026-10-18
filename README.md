@@ -32,8 +32,11 @@ allowed to influence the plan.
   boundary preserved); persisted to chat history.
 - **Accept Plan → one-shot prompt.** Turns the finished plan into a single,
   ready-to-run prompt for a coding agent, built only from *verified* guidance.
-- **`skills.md` export.** Download or copy a Markdown file of every skill used
-  (with trust status) to drop into your own prompt.
+- **`skills.md` export.** Download or copy a Markdown file of every skill used.
+  **Skills from SkillDB are reproduced verbatim** (quoted exactly, not
+  summarised, with attribution); **skills the agent authors itself follow
+  [Anthropic's SKILL.md format](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills)**
+  — YAML frontmatter with `name` + `description`, then a Markdown body.
 - **Skills tab = full SkillDB catalogue.** When live, browse **all ~6,000+
   SkillDB skills** with server-side pagination, full-text search, domain
   filter (38 domains), and a trust-level filter. Every page is verified.

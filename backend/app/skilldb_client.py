@@ -97,6 +97,11 @@ def _to_skill(item: Dict[str, Any], instructions: str = "") -> Skill:
     name = item.get("name") or item.get("title") or item.get("id", "Unknown skill")
     desc = item.get("description") or ""
     text = f"{name} {desc} {item.get('pack','')} {item.get('category','')}"
+
+    # Verbatim content exactly as SkillDB returns it — never summarised.
+    # Prefer full `content` (paid tier); otherwise the `content_preview`.
+    verbatim = (item.get("content") or item.get("content_preview") or desc or "").strip()
+
     return Skill(
         id=_slug(item["id"]),
         name=name,
@@ -109,6 +114,9 @@ def _to_skill(item: Dict[str, Any], instructions: str = "") -> Skill:
         # injection/dangerous ops in the verification engine before trusting it.
         signature="SKILLDB-" + item.get("pack", "pack"),
         experience_levels=["beginner", "intermediate", "advanced"],
+        verbatim=verbatim,
+        source_ref=f"https://skilldb.dev — {item.get('id', '')}",
+        upgrade_note=item.get("upgrade_note", ""),
     )
 
 

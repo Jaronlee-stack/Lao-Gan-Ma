@@ -55,6 +55,12 @@ class Skill(BaseModel):
     experience_levels: List[str] = Field(default_factory=lambda: ["beginner", "intermediate", "advanced"])
     trust_level: TrustLevel = TrustLevel.UNVERIFIED
     verification: Optional[VerificationReport] = None
+    # Raw, UNMODIFIED content exactly as returned by SkillDB (verbatim).
+    # Only populated for externally-sourced skills; copied, never summarised.
+    verbatim: str = ""
+    # Attribution for externally-sourced skills (e.g. the SkillDB id/url).
+    source_ref: str = ""
+    upgrade_note: str = ""
 
 
 # ---------------------------------------------------------------------------

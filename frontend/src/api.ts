@@ -27,6 +27,9 @@ export interface Skill {
   experience_levels: string[];
   trust_level: TrustLevel;
   verification: VerificationReport | null;
+  verbatim?: string;
+  source_ref?: string;
+  upgrade_note?: string;
 }
 
 export interface PhaseTask {
