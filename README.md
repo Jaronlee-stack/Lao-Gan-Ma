@@ -45,30 +45,45 @@ generated plan.
 
 ## Run it — one command
 
+**Requirements:** Python 3 and Node.js (npm) on your PATH.
+
+### 🪟 Windows
+From the project folder, in **PowerShell**:
+```powershell
+.\run.ps1
+```
+…or just **double-click `run.bat`** (this avoids PowerShell execution-policy
+prompts).
+
+> Don't use `bash run.sh` on Windows unless you have WSL or Git Bash — plain
+> PowerShell has no `bash`.
+
+### 🍎 macOS / 🐧 Linux
 ```bash
 ./run.sh
 ```
 
-That's it. `run.sh` installs all dependencies if they're missing (creates the
-Python virtualenv + `pip install`, and `npm install`), starts the backend and
+Either runner installs all dependencies if missing (creates the Python
+virtualenv + `pip install`, and `npm install`), starts the backend and
 frontend, and stops both cleanly on **Ctrl+C**.
 
 Then open **http://127.0.0.1:5173**. The Vite dev server proxies `/api` to the
 backend on port 8000.
 
-Requirements: `python3` and `npm` (Node.js) on your PATH.
-
 ### Download dependencies only
-If you just want to install everything without starting the app:
+Install everything without starting the app:
 
 ```bash
-./install.sh          # or:  ./run.sh --install
+# macOS / Linux
+./install.sh            # or:  ./run.sh --install
+
+# Windows (PowerShell)
+.\run.ps1 -Install
 ```
 
 Flags:
-- `./run.sh --install` — install dependencies, then exit
-- `./run.sh --force`   — reinstall all dependencies (wipes `.venv` and
-  `node_modules`), then start
+- macOS/Linux: `./run.sh --install` (deps only) · `./run.sh --force` (reinstall)
+- Windows: `.\run.ps1 -Install` (deps only) · `.\run.ps1 -Force` (reinstall)
 
 ### Run manually (two terminals)
 ```bash
