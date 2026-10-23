@@ -57,7 +57,22 @@ if [ "$INSTALL_ONLY" -eq 1 ]; then
   exit 0
 fi
 
-# ---- run both servers with clean shutdown ----------------------------------
+# ---- PRODUCTION (Render etc.): one process, one port -----------------------
+# When $PORT is set we are in a hosted single-service environment. Build the
+# frontend once, then run a single uvicorn bound to 0.0.0.0:$PORT so the host's
+# port scanner can see us. FastAPI serves both /api and the built React app.
+if [ -n "${PORT:-}" ]; then
+  echo ""
+  echo "==> Production mode detected (PORT=$PORT)"
+  echo "==> Building frontend"
+  cd "$FRONTEND"
+  npm run build
+  echo "==> Starting server -> 0.0.0.0:$PORT (API + frontend)"
+  cd "$BACKEND"
+  exec .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port "$PORT"
+fi
+
+# ---- LOCAL DEV: two servers with clean shutdown ----------------------------
 BACK_PID=""
 cleanup() {
   echo ""

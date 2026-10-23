@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import uuid
 
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from .models import (
     PlanRequest,
@@ -291,3 +294,42 @@ def security_scan(req: SecurityScanRequest) -> SecurityScanResult:
         steps=steps,
         summary="Scanned " + str(len(steps)) + " skills: " + ", ".join(bits) + ".",
     )
+
+
+# ---------------------------------------------------------------------------
+# Serve the built React frontend (production / single-service deploy)
+# ---------------------------------------------------------------------------
+# In a deployed Render web service we run ONE process on ONE port: FastAPI
+# serves both the /api routes above and the compiled React app. The frontend
+# calls the API with same-origin relative paths (/api/...), so no CORS or base
+# URL config is needed. Mounted last so every /api route is matched first.
+#
+# Locally (dev) the Vite dev server proxies /api to this backend instead, and
+# frontend/dist may not exist — so this block is a no-op when the build is
+# absent, keeping the dev workflow unchanged.
+_FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+
+if _FRONTEND_DIST.is_dir():
+    _ASSETS = _FRONTEND_DIST / "assets"
+    if _ASSETS.is_dir():
+        app.mount("/assets", StaticFiles(directory=_ASSETS), name="assets")
+
+    @app.get("/")
+    def _serve_index() -> FileResponse:
+        return FileResponse(_FRONTEND_DIST / "index.html")
+
+    @app.get("/{full_path:path}")
+    def _spa_fallback(full_path: str) -> FileResponse:
+        """SPA fallback: serve a real static file if it exists, else index.html.
+
+        API routes are registered above and take precedence; anything else is
+        handed to the single-page app so client-side routing works on reload.
+        """
+        candidate = (_FRONTEND_DIST / full_path).resolve()
+        # Keep the resolved path inside dist (defend against path traversal).
+        if (
+            candidate.is_file()
+            and _FRONTEND_DIST in candidate.parents
+        ):
+            return FileResponse(candidate)
+        return FileResponse(_FRONTEND_DIST / "index.html")

@@ -1,0 +1,15 @@
+# Render blueprint for Lao Gan Ma — single web service.
+# FastAPI serves both the /api routes and the compiled React frontend on one
+# port, bound to 0.0.0.0:$PORT so Render's port scanner detects it.
+services:
+  - type: web
+    name: lao-gan-ma
+    runtime: python
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt && cd frontend && npm install --no-fund --no-audit && npm run build
+    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: LGM_SKILLDB_LIVE
+        value: "1"

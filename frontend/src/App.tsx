@@ -34,7 +34,7 @@ import { Mascot, MascotMood } from "./components/Mascot";
 import { PullDownScreen } from "./components/PullDownScreen";
 import { SecurityScan } from "./components/SecurityScan";
 import { ContextPanel } from "./components/ContextPanel";
-import { Check, Shield, Adapt, Alert, Brain, Moon, Sun, Chat, Sparkle, X } from "./components/icons";
+import { Check, Shield, Adapt, Brain, Moon, Sun, Chat, Sparkle, X } from "./components/icons";
 
 type Tab = "chat" | "pantry" | "orders";
 
@@ -75,7 +75,7 @@ export default function App() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [busy, setBusy] = useState(false);
   const [mood, setMood] = useState<MascotMood>("idle");
-  const [error, setError] = useState<FriendlyError | null>(null);
+  const [, setError] = useState<FriendlyError | null>(null);
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [learned, setLearned] = useState<LearnedPrefs | null>(null);
@@ -241,16 +241,6 @@ export default function App() {
     } catch (e) {
       setError(friendlyError(e));
     }
-  }
-
-  async function decidePhase(phaseId: string, decision: "accepted" | "rejected" | "pending") {
-    if (!plan) return;
-    setPlan(await api.decidePhase(plan.id, phaseId, decision));
-  }
-
-  async function chatPhase(phaseId: string, message: string) {
-    if (!plan) return;
-    setPlan(await api.chatPhase(plan.id, phaseId, message, sessionId ?? undefined));
   }
 
   async function acceptPlan() {
@@ -548,23 +538,8 @@ export default function App() {
                       </span>
                     </div>
                   )}
-
-                <div className="mt-5 space-y-4">
-                  <p className="text-xs text-slate-500">
-                    Review each proposal below — <b>Accept</b> or <b>Reject</b> it individually, or{" "}
-                    <b>💬 Discuss</b> its reasoning with the agent. Rejected proposals are excluded
-                    from the final prompt.
-                  </p>
-                  {plan.phases.map((ph, idx) => (
-                    <PhaseCard
-                      key={ph.id}
-                      phase={ph}
-                      index={idx}
-                      onDecide={decidePhase}
-                      onChat={chatPhase}
-                    />
-                  ))}
                 </div>
+              </div>
 
               {/* composer: the screen's main job, always one click away */}
               <div className="shrink-0 border-t border-rule px-5 py-4 md:px-6">
