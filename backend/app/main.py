@@ -20,12 +20,16 @@ from .models import (
     ChatMessage,
     Plan,
     Skill,
+    UserContext,
+    SecurityScanRequest,
+    SecurityScanResult,
 )
 from .agent import agent
 from .skilldb import skill_db
-from .verification import verify_skill
+from .verification import verify_skill, scan_skill
 from . import db
 from . import preferences
+from . import context as user_context
 
 app = FastAPI(
     title="Lao Gan Ma — AI Project Agent",
@@ -232,3 +236,58 @@ def get_feedback() -> dict:
 @app.get("/api/preferences")
 def get_prefs() -> dict:
     return preferences.preference_summary()
+
+
+# ---------------------------------------------------------------------------
+# Global personalisation context
+# ---------------------------------------------------------------------------
+@app.get("/api/context", response_model=UserContext)
+def get_context() -> UserContext:
+    """The user-authored context applied to every plan in every session."""
+    return user_context.load()
+
+
+@app.put("/api/context", response_model=UserContext)
+def put_context(ctx: UserContext) -> UserContext:
+    return user_context.save(ctx)
+
+
+@app.delete("/api/context", response_model=UserContext)
+def delete_context() -> UserContext:
+    return user_context.clear()
+
+
+# ---------------------------------------------------------------------------
+# Security mode: the visible verification scan
+# ---------------------------------------------------------------------------
+@app.post("/api/security/scan", response_model=SecurityScanResult)
+def security_scan(req: SecurityScanRequest) -> SecurityScanResult:
+    """Run the trust boundary over the skills an idea would load, and report
+    every individual check so the user can watch it happen.
+
+    This is the same engine that gates real planning — not a simulation.
+    """
+    # The wider candidate pool, so anything the trust boundary rejects is
+    # visible rather than crowded out by higher-scoring clean results.
+    candidates = skill_db.candidates(req.idea, req.experience_level, limit=16)
+    steps = [scan_skill(s) for s in candidates]
+
+    loaded = sum(1 for s in steps if s.verdict == "loaded")
+    withheld = sum(1 for s in steps if s.verdict == "withheld")
+    blocked = sum(1 for s in steps if s.verdict == "blocked")
+
+    bits = [f"{loaded} skill(s) cleared to influence the plan"]
+    if withheld:
+        bits.append(f"{withheld} held as inert data")
+    if blocked:
+        bits.append(f"{blocked} blocked outright")
+
+    return SecurityScanResult(
+        idea=req.idea,
+        scanned=len(steps),
+        loaded=loaded,
+        withheld=withheld,
+        blocked=blocked,
+        steps=steps,
+        summary="Scanned " + str(len(steps)) + " skills: " + ", ".join(bits) + ".",
+    )

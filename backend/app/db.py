@@ -68,6 +68,15 @@ def init_db() -> None:
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (key, value)
             );
+
+            -- Global personalisation context the user sets explicitly. Unlike
+            -- `preferences` (which the agent infers), this is user-authored
+            -- truth that applies to every plan in every session.
+            CREATE TABLE IF NOT EXISTS user_context (
+                field      TEXT PRIMARY KEY,
+                value      TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
             """
         )
         _conn.commit()
@@ -192,3 +201,40 @@ def top_preferences(key: str, limit: int = 5, min_weight: float = 0.5) -> List[s
 
 
 init_db()
+
+# --------------------------------------------------------------------------
+# Global personalisation context (user-authored, applies to every session)
+# --------------------------------------------------------------------------
+def get_user_context() -> Dict[str, str]:
+    with _lock:
+        rows = _conn.execute("SELECT field, value FROM user_context").fetchall()
+    return {r["field"]: r["value"] for r in rows}
+
+
+def set_user_context(fields: Dict[str, Any]) -> None:
+    """Upsert the provided fields. An empty string clears a field."""
+    with _lock:
+        for field, value in fields.items():
+            if value is None:
+                continue
+            text = value if isinstance(value, str) else json.dumps(value)
+            if text.strip() == "":
+                _conn.execute("DELETE FROM user_context WHERE field = ?", (field,))
+                continue
+            _conn.execute(
+                """
+                INSERT INTO user_context (field, value, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(field) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = excluded.updated_at
+                """,
+                (field, text, _now()),
+            )
+        _conn.commit()
+
+
+def clear_user_context() -> None:
+    with _lock:
+        _conn.execute("DELETE FROM user_context")
+        _conn.commit()

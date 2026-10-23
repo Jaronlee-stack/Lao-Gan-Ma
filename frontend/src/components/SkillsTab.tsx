@@ -1,22 +1,34 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+/**
+ * The skills catalogue. Built to the sheet's list pattern: underline tabs for
+ * trust state on a full-width rule, a toolbar with search on the left and the
+ * count on the right, then rows on a 1px rule with no card around them. The
+ * identity column takes the width; the trust mark sits at the row's end.
+ */
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, Skill, TrustLevel } from "../api";
 import { TrustBadge } from "./TrustBadge";
+import { Button } from "./Button";
 
 const PAGE_SIZE = 50;
+
+const TRUST_TABS: { id: "all" | TrustLevel; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "verified", label: "Verified" },
+  { id: "unverified", label: "Unverified" },
+  { id: "blocked", label: "Blocked" },
+];
 
 export function SkillsTab({ skills: localSkills }: { skills: Skill[] }) {
   const [source, setSource] = useState<{ live_status: string; url: string } | null>(null);
   const [domains, setDomains] = useState<string[]>([]);
 
-  // Browse state (server-driven when live).
   const [skills, setSkills] = useState<Skill[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
-  const [resultSource, setResultSource] = useState<string>("");
+  const [resultSource, setResultSource] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Filters.
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [domain, setDomain] = useState("");
@@ -24,10 +36,12 @@ export function SkillsTab({ skills: localSkills }: { skills: Skill[] }) {
 
   useEffect(() => {
     api.skillsSource().then(setSource).catch(() => {});
-    api.skillDomains().then((d) => setDomains(d.domains)).catch(() => {});
+    api
+      .skillDomains()
+      .then((d) => setDomains(d.domains))
+      .catch(() => {});
   }, []);
 
-  // Debounce the search box so we don't hit the API on every keystroke.
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search.trim()), 350);
     return () => clearTimeout(t);
@@ -49,7 +63,6 @@ export function SkillsTab({ skills: localSkills }: { skills: Skill[] }) {
         setHasMore(page.has_more);
         setResultSource(page.source);
       } catch {
-        // Fall back to whatever local skills were passed in.
         setSkills(localSkills);
         setTotal(localSkills.length);
         setHasMore(false);
@@ -61,12 +74,10 @@ export function SkillsTab({ skills: localSkills }: { skills: Skill[] }) {
     [debounced, domain, localSkills]
   );
 
-  // Reload from page 0 whenever a filter changes.
   useEffect(() => {
     load(0);
   }, [load]);
 
-  // Trust filter is applied client-side on the current page.
   const visible = useMemo(
     () => (trust === "all" ? skills : skills.filter((s) => s.trust_level === trust)),
     [skills, trust]
@@ -74,60 +85,63 @@ export function SkillsTab({ skills: localSkills }: { skills: Skill[] }) {
 
   const page = Math.floor(offset / PAGE_SIZE) + 1;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const live = source?.live_status === "ok" || resultSource === "skilldb.dev";
 
   return (
-    <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-      <div className="flex items-center justify-between mb-1">
-        <h2 className="font-bold text-slate-800">SkillDB catalogue</h2>
-        <span className="text-xs text-slate-400">
-          {total.toLocaleString()} skills{resultSource === "skilldb.dev" ? " (live)" : ""}
-        </span>
-      </div>
-      <div className="flex items-center gap-2 mb-4 text-xs">
-        <span className="text-slate-500">
-          Source:{" "}
-          <a
-            href={source?.url || "https://skilldb.dev"}
-            target="_blank"
-            rel="noreferrer"
-            className="text-chili-600 underline"
-          >
-            SkillDB (skilldb.dev)
-          </a>
-        </span>
-        {source && (
-          <span
-            className={`px-2 py-0.5 rounded-full border ${
-              source.live_status === "ok"
-                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                : source.live_status === "offline"
-                ? "bg-amber-50 text-amber-700 border-amber-200"
-                : "bg-slate-100 text-slate-500 border-slate-200"
+    <section>
+      <p className="text-body text-muted">
+        Discovered from{" "}
+        <a
+          href={source?.url || "https://skilldb.dev"}
+          target="_blank"
+          rel="noreferrer"
+          className="text-ink underline decoration-control underline-offset-2 hover:decoration-accent"
+        >
+          SkillDB
+        </a>
+        . Every one is verified before it can shape a plan.
+      </p>
+
+      {/* trust tabs on a full-width rule, 2px indicator */}
+      <div role="tablist" aria-label="Trust level" className="mt-4 flex gap-5 border-b border-edge">
+        {TRUST_TABS.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={trust === t.id}
+            onClick={() => setTrust(t.id)}
+            data-ring
+            className={`-mb-px border-b-2 py-2.5 text-body transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+              trust === t.id
+                ? "border-accent font-medium text-ink"
+                : "border-transparent text-muted hover:text-ink"
             }`}
           >
-            {source.live_status === "ok"
-              ? "● live"
-              : source.live_status === "offline"
-              ? "● offline (local fallback)"
-              : source.live_status === "disabled"
-              ? "● local only"
-              : "● checking…"}
-          </span>
-        )}
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-2 mb-4">
+      {/* toolbar: search left, count right */}
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <label htmlFor="skill-search" className="sr-only">
+          Search skills
+        </label>
         <input
+          id="skill-search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search all skills…"
-          className="flex-1 min-w-[200px] rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          placeholder="Search skills"
+          className="h-control w-full max-w-xs rounded-control border border-control bg-surface px-2.5 text-body text-ink placeholder:text-faint focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
         />
+        <label htmlFor="skill-domain" className="sr-only">
+          Domain
+        </label>
         <select
+          id="skill-domain"
           value={domain}
           onChange={(e) => setDomain(e.target.value)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm max-w-[220px]"
+          className="h-control max-w-[14rem] rounded-control border border-control bg-surface px-2.5 text-body text-ink focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
         >
           <option value="">All domains</option>
           {domains.map((d) => (
@@ -136,86 +150,74 @@ export function SkillsTab({ skills: localSkills }: { skills: Skill[] }) {
             </option>
           ))}
         </select>
-        <select
-          value={trust}
-          onChange={(e) => setTrust(e.target.value as "all" | TrustLevel)}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        >
-          <option value="all">All trust levels</option>
-          <option value="verified">Verified</option>
-          <option value="unverified">Unverified</option>
-          <option value="blocked">Blocked</option>
-        </select>
+        <p className="num ml-auto text-small text-muted">
+          {total.toLocaleString()} skills{live ? ", live" : ", local"}
+        </p>
       </div>
 
-      {/* Grid */}
+      {/* rows */}
       {loading ? (
-        <p className="text-sm text-slate-400 text-center py-10">Loading skills…</p>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {visible.map((s) => (
-            <div key={s.id} className="border border-slate-200 rounded-lg p-4">
-              <div className="flex items-start justify-between gap-2">
-                <span className="text-sm font-semibold text-slate-800">{s.name}</span>
-                <TrustBadge level={s.trust_level} />
-              </div>
-              <span className="inline-block mt-1 text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
-                {s.category}
-              </span>
-              <p className="text-xs text-slate-500 mt-2">{s.summary}</p>
-              {s.technologies.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {s.technologies.map((t) => (
-                    <span key={t} className="text-xs bg-chili-50 text-chili-700 px-2 py-0.5 rounded">
-                      {t}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {s.verification && s.verification.findings.length > 0 && (
-                <ul className="mt-2 space-y-0.5">
-                  {s.verification.findings.map((f, i) => (
-                    <li
-                      key={i}
-                      className={`text-xs ${
-                        f.severity === "critical" ? "text-red-600" : "text-amber-600"
-                      }`}
-                    >
-                      [{f.severity}] {f.code}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
-          {visible.length === 0 && (
-            <p className="text-sm text-slate-400 col-span-full text-center py-8">
-              No skills match your filters.
-            </p>
-          )}
+        <p className="py-10 text-center text-body text-muted">Loading skills</p>
+      ) : visible.length === 0 ? (
+        <div className="mt-4 rounded-card border border-edge px-4 py-10 text-center">
+          <p className="text-body text-muted">No skills match these filters.</p>
         </div>
+      ) : (
+        <ul className="mt-2 divide-y divide-rule border-y border-rule">
+          {visible.map((s) => (
+            <li key={s.id} className="flex items-start gap-3 px-1 py-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="text-body font-medium text-ink">{s.name}</span>
+                  <span className="text-small text-muted">{s.category}</span>
+                </div>
+                <p className="mt-0.5 text-small text-muted">{s.summary}</p>
+                {s.technologies.length > 0 && (
+                  <p className="mt-1 text-small text-faint">{s.technologies.join(", ")}</p>
+                )}
+                {s.verification && s.verification.findings.length > 0 && (
+                  <ul className="mt-1 flex flex-col gap-0.5">
+                    {s.verification.findings.map((f, i) => (
+                      <li
+                        key={i}
+                        className={`text-small ${
+                          f.severity === "critical" ? "text-negative" : "text-warning"
+                        }`}
+                      >
+                        {f.code}: {f.message}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <TrustBadge level={s.trust_level} />
+            </li>
+          ))}
+        </ul>
       )}
 
-      {/* Pagination */}
+      {/* pagination */}
       {total > PAGE_SIZE && (
-        <div className="flex items-center justify-center gap-3 mt-5">
-          <button
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => load(Math.max(0, offset - PAGE_SIZE))}
             disabled={offset === 0 || loading}
-            className="text-sm px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-40"
           >
-            ← Prev
-          </button>
-          <span className="text-sm text-slate-500">
+            Previous
+          </Button>
+          <p className="num text-small text-muted">
             Page {page} of {totalPages.toLocaleString()}
-          </span>
-          <button
+          </p>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => load(offset + PAGE_SIZE)}
             disabled={!hasMore || loading}
-            className="text-sm px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 disabled:opacity-40"
           >
-            Next →
-          </button>
+            Next
+          </Button>
         </div>
       )}
     </section>

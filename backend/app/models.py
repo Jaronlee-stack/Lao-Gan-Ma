@@ -183,3 +183,87 @@ class FeedbackRequest(BaseModel):
     session_id: Optional[str] = None
     rating: int = Field(..., ge=1, le=5)
     remarks: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Global personalisation context
+# ---------------------------------------------------------------------------
+class UserContext(BaseModel):
+    """User-authored context applied to every plan, in every session.
+
+    Distinct from learned `preferences`: this is explicit truth the user
+    states about themselves, not something the agent inferred.
+    """
+
+    display_name: str = Field("", description="What the agent should call you")
+    role: str = Field("", description="e.g. solo founder, backend engineer, student")
+    experience_level: str = Field("", description="beginner | intermediate | advanced")
+    preferred_stack: List[str] = Field(default_factory=list, description="Languages/frameworks you reach for")
+    avoid: List[str] = Field(default_factory=list, description="Tech to steer away from")
+    constraints: List[str] = Field(default_factory=list, description="Standing constraints (budget, platform, team size)")
+    goals: str = Field("", description="What you're generally optimising for")
+    notes: str = Field("", description="Anything else the agent should always know")
+    security_mode: bool = Field(False, description="Show the verification scan before skills load")
+
+    def as_prompt_block(self) -> str:
+        """Render the context as guidance for the planner. Only non-empty fields."""
+        lines: List[str] = []
+        if self.display_name:
+            lines.append(f"- The user's name is {self.display_name}.")
+        if self.role:
+            lines.append(f"- They work as: {self.role}.")
+        if self.experience_level:
+            lines.append(f"- Experience level: {self.experience_level}.")
+        if self.preferred_stack:
+            lines.append(f"- Prefers these technologies: {', '.join(self.preferred_stack)}.")
+        if self.avoid:
+            lines.append(f"- Avoid recommending: {', '.join(self.avoid)}.")
+        if self.constraints:
+            lines.append(f"- Standing constraints: {'; '.join(self.constraints)}.")
+        if self.goals:
+            lines.append(f"- Optimising for: {self.goals}.")
+        if self.notes:
+            lines.append(f"- Additional context: {self.notes}")
+        return "\n".join(lines)
+
+    def is_empty(self) -> bool:
+        return not self.as_prompt_block().strip()
+
+
+# ---------------------------------------------------------------------------
+# Security mode: the visible verification scan
+# ---------------------------------------------------------------------------
+class ScanCheck(BaseModel):
+    """One individual check run against one skill."""
+
+    name: str              # e.g. "Signature / trusted source"
+    code: str              # e.g. "SIGNATURE"
+    passed: bool
+    detail: str = ""
+
+
+class ScanStep(BaseModel):
+    """The full verification trace for a single skill."""
+
+    skill_id: str
+    skill_name: str
+    source: str
+    checks: List[ScanCheck] = Field(default_factory=list)
+    trust_level: TrustLevel
+    verdict: str           # "loaded" | "withheld" | "blocked"
+    reason: str = ""
+
+
+class SecurityScanRequest(BaseModel):
+    idea: str = Field(..., min_length=3)
+    experience_level: str = "intermediate"
+
+
+class SecurityScanResult(BaseModel):
+    idea: str
+    scanned: int
+    loaded: int
+    withheld: int
+    blocked: int
+    steps: List[ScanStep] = Field(default_factory=list)
+    summary: str = ""

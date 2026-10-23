@@ -19,15 +19,17 @@ from .models import (
     Phase,
     PhaseTask,
     PhaseChatTurn,
+    PhaseChatTurn,
     PlanRequest,
     AdaptRequest,
     Skill,
     TrustLevel,
 )
 from .skilldb import skill_db
-from .verification import safe_instructions
+from .verification import safe_instructions, scan_and_release, GUARDRAIL_PREAMBLE
 from .llm import get_llm
 from . import preferences
+from . import context as user_context
 
 # Canonical lifecycle phases. Each maps to the skill categories it draws from.
 _PHASE_BLUEPRINT = [
@@ -56,18 +58,31 @@ class PlanningAgent:
         return [s for s in discovered if s.category in categories]
 
     def _apply_learned_bias(self, discovered: List[Skill]) -> List[Skill]:
-        """Re-order discovered skills so learned-favourite technologies surface
-        first. Pure re-ranking — never adds unverified skills or changes trust.
+        """Re-order discovered skills by what the user prefers.
+
+        Two signals, both transparent and both pure re-ranking (never adds
+        skills or changes trust):
+          * explicit global context  -> strong weight (the user said so)
+          * learned preferences      -> weaker weight (the agent inferred it)
+        Technologies the user asked to avoid are pushed down.
         """
-        favs = {t.lower() for t in preferences.preferred_techs()}
-        if not favs:
+        ctx = user_context.load()
+        explicit = {t.lower() for t in ctx.preferred_stack}
+        avoided = {t.lower() for t in ctx.avoid}
+        learned = {t.lower() for t in preferences.preferred_techs()}
+        if not (explicit or avoided or learned):
             return discovered
 
-        def boost(skill: Skill) -> int:
-            return sum(1 for t in skill.technologies if t.lower() in favs)
+        def score(skill: Skill) -> int:
+            techs = [t.lower() for t in skill.technologies]
+            s = 0
+            s += 3 * sum(1 for t in techs if t in explicit)
+            s += 1 * sum(1 for t in techs if t in learned)
+            s -= 4 * sum(1 for t in techs if t in avoided)
+            return s
 
-        # Stable sort by boost descending keeps original relevance as tiebreak.
-        return sorted(discovered, key=boost, reverse=True)
+        # Stable sort by score descending keeps original relevance as tiebreak.
+        return sorted(discovered, key=score, reverse=True)
 
     def _build_phases(self, discovered: List[Skill], experience: str) -> List[Phase]:
         phases: List[Phase] = []
@@ -100,15 +115,21 @@ class PlanningAgent:
         needs_approval = key in _APPROVAL_PHASES
 
         for s in matched:
-            # Enforcement: verified skills contribute their guidance; others
-            # contribute only their (data-only) name so the user still sees them.
-            guidance = safe_instructions(s)
-            if guidance:
-                detail = guidance
-            elif s.trust_level == TrustLevel.BLOCKED:
+            # Scan-on-call: every skill is unverified in storage. The moment we
+            # call upon it here, we scan it live. Clean -> released (VERIFIED)
+            # with fenced guidance; dirty -> BLOCKED and its text never shown.
+            released, fenced = scan_and_release(s)
+            # Mutate the skill in place so the plan's skills_used list reflects
+            # the call-time verdict (used by one-shot prompt + skills.md).
+            s.trust_level = released.trust_level
+            s.verification = released.verification
+
+            if released.trust_level == TrustLevel.BLOCKED:
                 detail = f"[blocked skill '{s.name}' excluded from guidance]"
+            elif fenced:
+                detail = fenced
             else:
-                detail = f"[skill '{s.name}' pending verification — guidance withheld]"
+                detail = f"[skill '{s.name}' released but carried no guidance]"
             tasks.append(
                 PhaseTask(
                     title=f"Apply: {s.name}",
@@ -137,9 +158,18 @@ class PlanningAgent:
             f"{p.id}:{p.name}" for p in phases if any(t.approval_required for t in p.tasks)
         ]
 
+        # Global personalisation context is authoritative user-stated truth and
+        # is handed to the planner alongside the idea itself.
+        ctx = user_context.load()
+        ctx_block = ctx.as_prompt_block()
+        prompt = f"{req.idea}\nExperience: {req.experience_level}\nPreferences: {', '.join(req.preferences)}"
+        if ctx_block:
+            prompt += f"\n\nAbout this user (applies to every plan):\n{ctx_block}"
+
         summary = self._llm.complete(
-            system="You are Lao Gan Ma, a trustworthy AI project-planning agent.",
-            prompt=f"{req.idea}\nExperience: {req.experience_level}\nPreferences: {', '.join(req.preferences)}",
+            system=GUARDRAIL_PREAMBLE
+            + "\nYou are Lao Gan Ma, a trustworthy AI project-planning agent.",
+            prompt=prompt,
         )
 
         plan = Plan(
@@ -152,6 +182,19 @@ class PlanningAgent:
             pending_approvals=pending,
             notes=[f"Planner LLM: {self._llm.name}"],
         )
+
+        if ctx_block:
+            applied: List[str] = []
+            if ctx.display_name:
+                applied.append(f"planning for {ctx.display_name}")
+            if ctx.preferred_stack:
+                applied.append("favouring " + ", ".join(ctx.preferred_stack[:4]))
+            if ctx.avoid:
+                applied.append("avoiding " + ", ".join(ctx.avoid[:3]))
+            if ctx.constraints:
+                applied.append(f"{len(ctx.constraints)} standing constraint(s) honoured")
+            if applied:
+                plan.notes.append("Your context: " + "; ".join(applied) + ".")
 
         blocked = [s.name for s in discovered if s.trust_level == TrustLevel.BLOCKED]
         if blocked:
@@ -304,6 +347,14 @@ class PlanningAgent:
         lines.append(f"# Project idea\n{plan.idea}")
         lines.append(f"\n# Target experience level\n{plan.experience_level}")
 
+        # Global personalisation context — user-stated truth that should shape
+        # every decision the downstream coding agent makes.
+        ctx_block = user_context.load().as_prompt_block()
+        if ctx_block:
+            lines.append(
+                "\n# About the developer (honour these throughout)\n" + ctx_block
+            )
+
         # Recommended stack (verified skills only).
         techs = sorted({t for s in self._verified_skills(plan) for t in s.technologies})
         if techs:
@@ -327,14 +378,17 @@ class PlanningAgent:
                 else:
                     lines.append(f"- {t.title}: {detail}")
 
-        # Best-practice guidance block from verified skills.
-        guidance = [
-            f"- **{s.name}** ({', '.join(s.technologies)}): {safe_instructions(s)}"
-            for s in self._verified_skills(plan)
-            if safe_instructions(s)
-        ]
+        # Best-practice guidance block from skills released by the call-time
+        # scan. Each is re-scanned and fenced here so the downstream coding
+        # agent also receives it as clearly-marked untrusted reference data.
+        guidance = []
+        for s in self._verified_skills(plan):
+            _, fenced = scan_and_release(s)
+            if fenced:
+                guidance.append(f"- **{s.name}** ({', '.join(s.technologies)}):\n{fenced}")
         if guidance:
-            lines.append("\n# Verified best-practice guidance\n" + "\n".join(guidance))
+            lines.insert(0, GUARDRAIL_PREAMBLE)
+            lines.append("\n# Best-practice guidance (released by verification)\n" + "\n".join(guidance))
 
         lines.append(
             "\n# Deliverables\nProduce a working, well-structured codebase that "

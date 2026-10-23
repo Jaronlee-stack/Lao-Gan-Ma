@@ -1,4 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Button } from "./Button";
+import { Star } from "./icons";
+
+const dialogCard = "w-full max-w-md rounded-card border border-edge bg-surface p-5 shadow-xl"; // taste-skill-ignore: a dialog genuinely floats
 
 export function FeedbackModal({
   onSubmit,
@@ -12,6 +16,12 @@ export function FeedbackModal({
   const [remarks, setRemarks] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   async function submit() {
     if (rating === 0) return;
     setSubmitting(true);
@@ -23,53 +33,72 @@ export function FeedbackModal({
     }
   }
 
+  const shown = hover || rating;
+
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-        <h2 className="font-bold text-lg text-slate-800">How was this plan?</h2>
-        <p className="text-sm text-slate-500 mb-4">
-          Your rating helps Lao Gan Ma learn your preferences.
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="feedback-title"
+        className={dialogCard}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id="feedback-title" className="text-section font-medium text-ink">
+          How was this plan?
+        </h2>
+        <p className="mt-1 text-body text-muted">
+          Your rating tunes what Mala suggests next time.
         </p>
 
-        <div className="flex gap-1 justify-center mb-4">
+        <div className="my-4 flex gap-1" role="radiogroup" aria-label="Rating out of 5">
           {[1, 2, 3, 4, 5].map((n) => (
             <button
               key={n}
+              role="radio"
+              aria-checked={rating === n}
+              aria-label={`${n} of 5`}
               onMouseEnter={() => setHover(n)}
               onMouseLeave={() => setHover(0)}
               onClick={() => setRating(n)}
-              className="text-4xl transition-transform hover:scale-110"
-              aria-label={`${n} stars`}
+              data-ring
+              className={`rounded p-1 text-2xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                shown >= n ? "text-accent" : "text-control hover:text-muted"
+              }`}
             >
-              <span className={(hover || rating) >= n ? "text-amber-400" : "text-slate-300"}>
-                ★
-              </span>
+              <Star filled={shown >= n} />
             </button>
           ))}
         </div>
 
+        <label htmlFor="remarks" className="sr-only">
+          Remarks
+        </label>
         <textarea
+          id="remarks"
           value={remarks}
           onChange={(e) => setRemarks(e.target.value)}
           rows={3}
-          placeholder="Any remarks? (optional)"
-          className="w-full rounded-lg border border-slate-300 p-3 text-sm"
+          placeholder="Anything to add? Optional."
+          className="w-full resize-y rounded-control border border-control bg-surface px-3 py-2 text-body text-ink placeholder:text-faint focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
         />
 
-        <div className="flex justify-end gap-2 mt-4">
-          <button
-            onClick={onClose}
-            className="text-sm px-4 py-2 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
-          >
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="subtle" size="sm" onClick={onClose}>
             Skip
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
             onClick={submit}
-            disabled={rating === 0 || submitting}
-            className="text-sm px-4 py-2 rounded-lg bg-chili-600 hover:bg-chili-700 disabled:opacity-50 text-white"
+            loading={submitting}
+            disabled={rating === 0}
           >
-            {submitting ? "Sending…" : "Submit feedback"}
-          </button>
+            Send feedback
+          </Button>
         </div>
       </div>
     </div>

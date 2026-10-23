@@ -1,19 +1,34 @@
 """Quick smoke test of core agent + verification logic (no server needed)."""
 from app.skilldb import skill_db
-from app.verification import verify_skill, safe_instructions
+from app.verification import verify_skill, safe_instructions, scan_and_release
 from app.models import PlanRequest, AdaptRequest, TrustLevel
 from app.agent import agent
 
 
-def test_verification_blocks_malicious():
+def test_verification_trust_levels_and_scan_on_call():
+    # A malicious skill is BLOCKED at storage time (critical finding) and leaks
+    # no instructions.
     bad = skill_db.get("skill-untrusted-sample")
     assert bad is not None
     assert bad.trust_level == TrustLevel.BLOCKED, bad.trust_level
     assert safe_instructions(bad) == "", "blocked skill must not leak instructions"
+
+    # A signed skill from a trusted source that passes every screen is VERIFIED
+    # at rest (so the catalogue shows it as verified).
     good = skill_db.get("skill-fastapi-backend")
-    assert good.trust_level == TrustLevel.VERIFIED
-    assert safe_instructions(good) != ""
-    print("OK verification: malicious blocked, trusted verified")
+    assert good.trust_level == TrustLevel.VERIFIED, good.trust_level
+    assert safe_instructions(good), "verified skill should expose its instructions"
+
+    # Scan-on-call: clean skill is (re)released VERIFIED with fenced guidance;
+    # malicious skill stays blocked and releases no guidance.
+    rel_good, g_good = scan_and_release(good)
+    assert rel_good.trust_level == TrustLevel.VERIFIED
+    assert "<<<UNTRUSTED_SKILL_CONTENT>>>" in g_good
+
+    rel_bad, g_bad = scan_and_release(bad)
+    assert rel_bad.trust_level == TrustLevel.BLOCKED
+    assert g_bad == "", "blocked skill must release no guidance"
+    print("OK verification: signed+clean verified at rest, released clean on call, malicious blocked")
 
 
 def test_plan_excludes_blocked_guidance():
@@ -42,7 +57,7 @@ def test_adapt_and_approve():
 
 
 if __name__ == "__main__":
-    test_verification_blocks_malicious()
+    test_verification_trust_levels_and_scan_on_call()
     test_plan_excludes_blocked_guidance()
     test_adapt_and_approve()
     print("\nALL SMOKE TESTS PASSED")

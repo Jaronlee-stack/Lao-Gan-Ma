@@ -95,6 +95,59 @@ export interface SessionSummary {
   message_count: number;
 }
 
+/** User-authored context applied to every plan, in every session. */
+export interface UserContext {
+  display_name: string;
+  role: string;
+  experience_level: string;
+  preferred_stack: string[];
+  avoid: string[];
+  constraints: string[];
+  goals: string;
+  notes: string;
+  security_mode: boolean;
+}
+
+export const emptyContext: UserContext = {
+  display_name: "",
+  role: "",
+  experience_level: "",
+  preferred_stack: [],
+  avoid: [],
+  constraints: [],
+  goals: "",
+  notes: "",
+  security_mode: false,
+};
+
+/** Security mode: the visible verification trace. */
+export interface ScanCheck {
+  name: string;
+  code: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface ScanStep {
+  skill_id: string;
+  skill_name: string;
+  source: string;
+  checks: ScanCheck[];
+  trust_level: TrustLevel;
+  verdict: "loaded" | "withheld" | "blocked";
+  reason: string;
+}
+
+export interface SecurityScanResult {
+  idea: string;
+  scanned: number;
+  loaded: number;
+  withheld: number;
+  blocked: number;
+  steps: ScanStep[];
+  summary: string;
+}
+
 export interface ChatMessage {
   role: string;
   content: string;
@@ -201,4 +254,25 @@ export const api = {
     fetch("/api/skills/domains").then((r) => json<{ domains: string[] }>(r)),
 
   skillsMarkdownUrl: (plan_id: string) => `/api/plan/${plan_id}/skills.md`,
+
+  // -- global personalisation context --------------------------------------
+  getContext: () => fetch("/api/context").then((r) => json<UserContext>(r)),
+
+  saveContext: (ctx: UserContext) =>
+    fetch("/api/context", {
+      method: "PUT",
+      headers: jsonHeaders,
+      body: JSON.stringify(ctx),
+    }).then((r) => json<UserContext>(r)),
+
+  clearContext: () =>
+    fetch("/api/context", { method: "DELETE" }).then((r) => json<UserContext>(r)),
+
+  // -- security mode: verification scan -----------------------------------
+  securityScan: (idea: string, experience_level = "intermediate") =>
+    fetch("/api/security/scan", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ idea, experience_level }),
+    }).then((r) => json<SecurityScanResult>(r)),
 };

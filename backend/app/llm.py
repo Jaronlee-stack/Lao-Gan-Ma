@@ -13,15 +13,14 @@ from __future__ import annotations
 import os
 from typing import Protocol
 
-# add credentials: set your Groq API key here (or via the GROQ_API_KEY env var).
+# Configure credentials through the GROQ_API_KEY environment variable only.
 # Get a free key at https://console.groq.com/keys
-GROQ_API_KEY = ""
 
 # Groq's OpenAI-compatible base URL.
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
 # Free, open-weight model on Groq's free tier.
-GROQ_DEFAULT_MODEL = "llama-3.1-8b-instant"
+GROQ_DEFAULT_MODEL = "openai/gpt-oss-20b"
 
 
 class LLMClient(Protocol):
@@ -82,8 +81,8 @@ class GroqClient:
 
 
 def get_llm() -> LLMClient:
-    # Prefer an env var; fall back to the inline GROQ_API_KEY constant above.
-    api_key = os.getenv("GROQ_API_KEY") or GROQ_API_KEY
+    # Read the key from the environment; never store credentials in source.
+    api_key = os.getenv("GROQ_API_KEY")
     if api_key:
         model = os.getenv("LGM_LLM_MODEL", GROQ_DEFAULT_MODEL)
         return GroqClient(api_key=api_key, model=model)

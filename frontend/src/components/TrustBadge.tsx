@@ -1,15 +1,22 @@
 import { TrustLevel } from "../api";
+import { Check, Alert, X } from "./icons";
 
-const trustStyles: Record<TrustLevel, string> = {
-  verified: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  unverified: "bg-amber-100 text-amber-700 border-amber-200",
-  blocked: "bg-red-100 text-red-700 border-red-200",
+/** Each trust level carries its own mark as well as its own ink, so the three
+ *  read apart without relying on hue alone. */
+const styles: Record<TrustLevel, { pill: string; Icon: typeof Check; word: string }> = {
+  verified: { pill: "bg-pill-pos-bg text-pill-pos-ink", Icon: Check, word: "verified" },
+  unverified: { pill: "bg-pill-warn-bg text-pill-warn-ink", Icon: Alert, word: "unverified" },
+  blocked: { pill: "bg-pill-neg-bg text-pill-neg-ink", Icon: X, word: "blocked" },
 };
 
 export function TrustBadge({ level }: { level: TrustLevel }) {
+  const s = styles[level] ?? styles.unverified;
+  const { Icon } = s;
   return (
-    <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${trustStyles[level]}`}>
-      {level}
+    <span
+      className={`inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-small font-medium ${s.pill}`}
+    >
+      <Icon /> {s.word}
     </span>
   );
 }

@@ -17,7 +17,7 @@ import re
 from pathlib import Path
 from typing import List, Dict
 
-from .models import Skill
+from .models import Skill, TrustLevel
 from .verification import apply_verification
 from . import skilldb_client
 
@@ -169,6 +169,31 @@ class SkillDB:
             score += 0.5
 
         return score
+
+    def candidates(self, idea: str, experience: str = "intermediate", limit: int = 24) -> List[Skill]:
+        """Every skill considered for an idea, best first, before truncation.
+
+        `discover` returns the slice that actually reaches the planner; this
+        returns the wider pool the trust boundary has to screen. Security mode
+        reports on this set, so a skill that fails verification is visible even
+        when higher-scoring live results would have crowded it out.
+        """
+        live = self._fetch_live(idea, limit=limit)
+        pool: Dict[str, Skill] = {s.id: s for s in self._skills}
+        for s in live:
+            pool[s.id] = s
+
+        scored = [(self._score(s, idea, experience), s) for s in pool.values()]
+        scored = [(sc, s) for sc, s in scored if sc > 0]
+        # Anything that fails verification is always surfaced, regardless of
+        # relevance score: a blocked skill is exactly what the user needs to see.
+        risky = [s for s in pool.values() if s.trust_level != TrustLevel.VERIFIED]
+        seen = {s.id for _, s in scored}
+        for s in risky:
+            if s.id not in seen:
+                scored.append((0.0, s))
+        scored.sort(key=lambda pair: pair[0], reverse=True)
+        return [s for _, s in scored[:limit]]
 
     def discover(self, idea: str, experience: str = "intermediate", limit: int = 8) -> List[Skill]:
         """Return the most relevant skills for an idea, best first.
